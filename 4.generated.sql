@@ -6,6 +6,7 @@
 -- We can generate a set of materialized views that the query planner will use to speed up queries.
 -- https://docs.snowflake.com/en/user-guide/views-materialized.html#how-the-query-optimizer-uses-materialized-views
 -- https://cloud.google.com/bigquery/docs/materialized-views#query
+-- https://docs.aws.amazon.com/redshift/latest/dg/materialized-view-auto-rewrite.html
 
 -- This is the base table with the lowest level of aggregation.
 -- The queries from the BI tool should reference this table.
