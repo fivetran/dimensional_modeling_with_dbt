@@ -2,6 +2,7 @@
 Suppose we have a simple dbt project with two models, `dim_account` and `fact_revenue`:
 
 ```sql
+-- dim_account.sql
 select 
   ___ as account_id, 
   ___ as customer_type, 
@@ -12,6 +13,7 @@ from ...
 ```
 
 ```sql
+-- fact_revenue.sql
 select 
   ___ as account_id,
   ___ as recognized_date, 
@@ -20,57 +22,45 @@ select
 from ...
 ```
 
-We extend dbt with a new concept: dimensional modeling. 
+```yaml
+models:
+  - name: dim_account
+    columns: 
+      - name: account_id
+      - name: customer_type
+      - name: acquisition_channel
+      - name: became_customer_date
+    # NEW!
+    measures:
+      - name: customer_count
+        type: count
+        sql: account_id
+        distinct: true
 
-```python
-dimension(
-  "dim_account.customer_type",
-  type = string,
-)
+  - name: fact_revenue
+    columns: 
+      - name: account_id
+      - name: recognized_date
+      - name: revenue
+    # NEW!
+    measures:
+      - name: total_revenue
+        type: sum
+        sql: revenue
 
-dimension(
-  "dim_account.acquisition_channel",
-  type = string,
-)
-
-dimension(
-  "dim_account.became_customer_date",
-  type = date,
-  levels = [year, quarter, month],
-)
-
-dimension(
-  "fact_revenue.recognized_date",
-  type = date,
-  levels = [year, quarter, month],
-)
-
-measure(
-  "fact_revenue.account_id",
-  type = count,
-  distinct = True,
-)
-
-measure(
-  "fact_revenue.revenue",
-  type = sum,
-)
-
-model(
-  "fact_revenue",
-  joins = [
-    join(
-      "dim_account", 
-      using = "account_id",
-      type = many_to_one,
-    ),
-  ]
-)
+# NEW!
+joins:
+  - name: revenue
+    tables: 
+      - name: fact_revenue
+      - name: dim_account
+        using: [account_id]
+        type: many_to_one
 ```
 
 This dimensional model serves two goals:
 1. Define dimension, measure and join metadata in one place where it can be consumed by all BI tools.
-2. Enable alternative query implementational strategies.
+2. Enable various query acceleration strategies.
 
 ## Query Acceleration Strategies
 
@@ -94,11 +84,11 @@ select
   date_trunc(became_customer_date, month) as became_customer_date,
   date_trunc(recognized_date, month) as recognized_date,
   -- Measures:
-  account_id, -- count(distinct ___) cannot be pre-aggregated so we will not attempt to optimize it.
+  array_agg(distinct account_id) as account_id,
   sum(revenue) as revenue,
 from fact_revenue
 join dim_account using (account_id)
-group by 1, 2, 3, 4, 5;
+group by 1, 2, 3, 4;
 ```
 
 Next, we choose a set of materializations that will speed up common queries using the algorithm described in https://calcite.apache.org/docs/lattice.html. Each materialization corresponds to a subset of dimensions and measures.
